@@ -44,8 +44,8 @@ r_v = rows of vanadium
 
 COMPUTE the chi-square value for confidence (1-a)
 W_m = zeros(w,c)			# make a window for updation
-p_Co = zeros(1,c_co)
-p_FCo = zeros(1,c_co)
+p_Co = zeros(1,c_co)  #previous Cobalt value
+p_FCo = zeros(1,c_co) # prev filtered value
 
 ###########   WE HAVE FETCHED ALL THE DATA WE NEED FOR GROSS ERROR #################
 
@@ -62,47 +62,30 @@ GET the PCA model data from PCACovarianceUpdate
 # E_v	-	eigen vector model
 # E_e	-	eigen value model
 
-INITIALIZE ff with empty list
-FOR n from 0 to no. of clusters DO
-	GET the no. of rows of data in cluster n 
-	APPEND it to ff
-END FOR
+GET the no. of data points in cluster store it in ff
 
 ##################			DONE		####################
 
-INITIALIZE Angle and Ratio to empty list
-INITIALIZE Angle_p with zeros
-INITIALIZE ratioEigVal noRelation nofault yesfault projectionCount 
-			cleanCount skip faultNoProjection faultYesProjection noFaultUpdateModel
-			noFaultDontUpateModel store_theta store_eigVal entry missingEntry
-			notmissingEntry with value zeros.
 
-FOR ti from zero to all time instance of rawdata(Rdc) DO
+
+FOR all time instance of rawdata(Rdc) DO
 	FOR all cluster Do
 		k=1/ff
-		INITIALIZE the projection matrix, proj, with zeros
-		SET the flags clusterValueMissing flagIsNegative skipCalculation forceFlag
-						rawIsNegative with FALSE
-		INITIALIZE pd pdu with zero with list of legnth no. of cluster
+		
+		
 		GET mean and var of RPCA model for each cluster 
 
 		FOR (spndk) all spnd in this cluster DO
 			GET the spndID of the spnd
 			GET the raw value of the spnd with id spndID, at time ti
 
-			IF raw value of spnd is negative DO
-	            UPDATE missingEntry += 1
-	            SET rawIsNegative flag to TRUE
-	        ELSE: UPDATE notmissingEntry += 1
-	        END IF
-
 	        IF the spnd is cobalt then DO
 
 	        	IF the raw value is negative then DO
-	        		x = p_co(1,spndID)
+	        		x = previous unfiltered value
 	        	END IF
-
-	        	y = as * p_Fco(1,spndID) + cs * p_co(1,spndID) + ds * x
+## updation
+	        	y = as * p_Fco(spndID) + cs * p_co(spndID) + ds * x
 	        	temp_Fco = y
 	        	temp_co = x
 
@@ -110,8 +93,6 @@ FOR ti from zero to all time instance of rawdata(Rdc) DO
 	        END IF
 
 	        IF the raw value is negative then DO:
-	        	proj[spndk] = 1
-	        	SET flagIsNegative with value TRUE
 	        	z = (y - mean(spndk)) / sqrt(var)      ## wrong
  				pd(spndk) = z
 
@@ -119,40 +100,21 @@ FOR ti from zero to all time instance of rawdata(Rdc) DO
  				pdu(spndk) = y
  				z = (y - mean(spndk)) / sqrt(var)  ## old mean variance is used
  				pd(spndk) = z
-
  			END IF
 
- 		IF raw value is not negative then:
- 			UPDATE cleanCount for cluster by 1
- 		END IF
 
- 		FOR k from 0 to no. of cobalt sensors
- 			IF temp_Fco for cobalt sensor is zero
- 				DO nothing
- 			ELSE:
- 				SET p_Fco for this sensor with temp_Fco
- 			END IF
- 			IF temp_co for this sensor is zero
- 				DO NOTHING
- 			ELSE:
- 				p_co = temp_co
- 			END IF
+ 		FOR all cobalt sensor
+ 			SET p_Fco for this sensor with temp_Fco and p_co = temp_co
 
  	    A = R_v(clusterj)
- 	    COMPUTE Vm to be a diagonal matrix with eigen value of clusterj as diagonal elements
+ 	    COMPUTE 'Vm' to be a diagonal matrix with eigen value of clusterj as diagonal elements
 
- 	    IF flagIsNegative is true then
- 	    	SET the flag clusterValueMissing to TRUE
- 	    	UPDATE the projectionCount in clusterj by 1
- 	    	INITIALIZE indices by empty list
- 	    	SAVE all the position where projection is required
+ 	    IF raw data is negative
  	    	COMPUTE the projection matrix, 'P'
  	    	IF projection was successful then:
  	    		A = P * A
  	    		Vm = P * Vm * P'
- 	    	ELSE projection was not successful then do
- 	    		SET skipCalculation flag to TRUE
- 	    		UPDATE no. of skip in the cluster by 1
+ 	    	
 
  	    IF projection is successful or not required
  	    	GET the no. of rows and columns of A
@@ -161,4 +123,16 @@ FOR ti from zero to all time instance of rawdata(Rdc) DO
  	    	P_rd = A * Pd'
  	    	gamma = P_rd' * Vm^-1  * P_rd
 
- 	    	IF gamma is less then chi-square value then
+ 	    	IF gamma is less then chi-square value then no update is required.
+ 	    		IF cluster value is notmissing:
+ 	    		FOR all SPND in cluster DO:
+ 	    			mean=(1-ff)mean + ff*present data
+ 	    			var=(1-ff)*var + ff*(pd-mean)^2
+ 	    			pd=(pd-mean)/sqrt(var)  ## normalize
+ 	    		Cov=(1-ff)*Cov + ff*pd'*pd
+ 	    		COMPUTE new eigenvalue and eigenvector and new relation Evector model by ratio test
+ 	    	ELSE gamma is more then chi-square value then Error is detected
+ 	    		FOR all SPND in the cluster
+ 	    			
+
+

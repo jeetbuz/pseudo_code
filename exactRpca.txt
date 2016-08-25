@@ -1,0 +1,164 @@
+IMPORT the files required
+
+
+###################   GROSS ERROR ANALYSIS PART   #######################
+
+sid=0						# start index for gross error analysis
+eid=2000					# end index for gross error analysis
+thresh=0.01					#Thresh for ratio test
+a=0.05  					#confidence level is 1-a = 0.95
+w=20						# window width for RPCA
+
+#### filtering parameter
+
+k=1							# gain for model
+tp=23.68					# time constant for inconel
+td=315						# time constant for Vanadium
+T=1							# sampling period
+
+#### get the filtering model
+
+GET the state space model from transfer function A,B,C,D
+as=(2+A*T)/(2-A*T)
+cs=(C*B*T - A*D*T - 2*D)/(2 - A*T)
+dss=(C*B*T - A*D*T + 2*D)/(2 - A*T)
+
+FETCH the rawdata and labels from sid to eid in the database
+CONCATENATE Inconel and Vanadium rawdata and labels together in, RdC,LC
+
+FETCH the cluster data from kcTools in C_d,C_l,C_c,C_m,C_v
+# C_d - clustered data, C_l - clustered labels, C_c clusters
+# C_m - mean of cluster, C_v - variance of cluster
+
+REMOVE faulty sensor data 
+SAVE clean sensor data and labels in Cd, Cl
+Cl_l = list of cluster
+
+r = rows in C_d
+c = columns in C_d
+c_co = columns in cobalt
+r_co = rows in cobalt
+c_v = columns of vanadium
+r_v = rows of vanadium 
+
+
+COMPUTE the chi-square value for confidence (1-a)
+W_m = zeros(w,c)			# make a window for updation
+p_Co = zeros(1,c_co)
+p_FCo = zeros(1,c_co)
+
+###########   WE HAVE FETCHED ALL THE DATA WE NEED FOR GROSS ERROR #################
+
+###########      GET THE PCA MODEL database 	##############
+
+GET the PCA model data from PCACovarianceUpdate
+
+# R_m 	-	combined mean of RPCA model
+# R_vr	-	combined variance of RPCA model
+# R_c	-	Covariance model from RPCA
+# R_e	-	Relational eigen value model
+# R_v 	-	Relational eigen vector model
+# R_d	-	Clustered data from RPCA mode;
+# E_v	-	eigen vector model
+# E_e	-	eigen value model
+
+INITIALIZE ff with empty list
+FOR n from 0 to no. of clusters DO
+	GET the no. of rows of data in cluster n 
+	APPEND it to ff
+END FOR
+
+##################			DONE		####################
+
+INITIALIZE Angle and Ratio to empty list
+INITIALIZE Angle_p with zeros
+INITIALIZE ratioEigVal noRelation nofault yesfault projectionCount 
+			cleanCount skip faultNoProjection faultYesProjection noFaultUpdateModel
+			noFaultDontUpateModel store_theta store_eigVal entry missingEntry
+			notmissingEntry with value zeros.
+
+FOR ti from zero to all time instance of rawdata(Rdc) DO
+	FOR all cluster Do
+		k=1/ff
+		INITIALIZE the projection matrix, proj, with zeros
+		SET the flags clusterValueMissing flagIsNegative skipCalculation forceFlag
+						rawIsNegative with FALSE
+		INITIALIZE pd pdu with zero with list of legnth no. of cluster
+		GET mean and var of RPCA model for each cluster 
+
+		FOR (spndk) all spnd in this cluster DO
+			GET the spndID of the spnd
+			GET the raw value of the spnd with id spndID, at time ti
+
+			IF raw value of spnd is negative DO
+	            UPDATE missingEntry += 1
+	            SET rawIsNegative flag to TRUE
+	        ELSE: UPDATE notmissingEntry += 1
+	        END IF
+
+	        IF the spnd is cobalt then DO
+
+	        	IF the raw value is negative then DO
+	        		x = p_co(1,spndID)
+	        	END IF
+
+	        	y = as * p_Fco(1,spndID) + cs * p_co(1,spndID) + ds * x
+	        	temp_Fco = y
+	        	temp_co = x
+
+	        ELSE: y = x
+	        END IF
+
+	        IF the raw value is negative then DO:
+	        	proj[spndk] = 1
+	        	SET flagIsNegative with value TRUE
+	        	z = (y - mean(spndk)) / sqrt(var)      ## wrong
+ 				pd(spndk) = z
+
+ 			ELSE:
+ 				pdu(spndk) = y
+ 				z = (y - mean(spndk)) / sqrt(var)  ## old mean variance is used
+ 				pd(spndk) = z
+
+ 			END IF
+
+ 		IF raw value is not negative then:
+ 			UPDATE cleanCount for cluster by 1
+ 		END IF
+
+ 		FOR k from 0 to no. of cobalt sensors
+ 			IF temp_Fco for cobalt sensor is zero
+ 				DO nothing
+ 			ELSE:
+ 				SET p_Fco for this sensor with temp_Fco
+ 			END IF
+ 			IF temp_co for this sensor is zero
+ 				DO NOTHING
+ 			ELSE:
+ 				p_co = temp_co
+ 			END IF
+
+ 	    A = R_v(clusterj)
+ 	    COMPUTE Vm to be a diagonal matrix with eigen value of clusterj as diagonal elements
+
+ 	    IF flagIsNegative is true then
+ 	    	SET the flag clusterValueMissing to TRUE
+ 	    	UPDATE the projectionCount in clusterj by 1
+ 	    	INITIALIZE indices by empty list
+ 	    	SAVE all the position where projection is required
+ 	    	COMPUTE the projection matrix, 'P'
+ 	    	IF projection was successful then:
+ 	    		A = P * A
+ 	    		Vm = P * Vm * P'
+ 	    	ELSE projection was not successful then do
+ 	    		SET skipCalculation flag to TRUE
+ 	    		UPDATE no. of skip in the cluster by 1
+
+ 	    IF projection is successful or not required
+ 	    	GET the no. of rows and columns of A
+
+ 	    	## Calculate residue 
+ 	    	P_rd = A * Pd'
+ 	    	gamma = P_rd' * Vm^-1  * P_rd
+
+ 	    	IF gamma is less then chi-square value then

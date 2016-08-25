@@ -1,0 +1,89 @@
+Load the normalized clustered data(C_data), cluster labels(C_l), combined mean(C_m) and combined variance(C_v) of Inconel and Vanadium data 
+
+# parameters 
+Sid = 0
+Eid = 1000
+th = 0.01
+
+
+Define function PCAMatrix(C_data, Sid, Eid):
+	## UnNormalize (Un_data) the Normalized C_data 
+	Un_data = (C_data x  sqrt(C_v)) + C_m
+
+	Get only the part of UnNormalized data starting from Sid to Eid 
+	Get the row(r) and column(c) of Un_data
+
+	For all the c (sensor) in Un_data 
+		Get the mean(m) and var(v) from Un_data of sensor
+		Renormalize Un_data, N_data = (Un_data -m)/v
+		Save the new mean, var and the N_data
+	End For
+Return Un_data, N_data, m, v
+
+## N_data is used for PCA model building
+
+
+Define function eigenRelations(C_mat):
+	Get Row, Col of C_mat 
+	Compute Cov_mat = ((C_mat)' x (C_mat)) / Row
+Return Cov_mat
+
+Get the clusterlist(Cl)  # This is of the form [[1, 3, 4],[2, 6],[5, 7]]
+						 # this is a list of list 
+n = no. of clusters in Cl
+
+
+abc = 0
+FOR i from 0 to n: 
+	FOR all Spnd in Cl(i) :
+		ID = Cl[i][Spnd]
+		find the data below and keep appending them
+		mat = Un_data[:,spndID]
+		cm = N_data[:,spndID]
+		mean = m[spndID]
+		var = v[spndID]
+		# now the data is in order of their precense in Clusterlist
+	END FOR
+
+	Cov_mat = eigenRelations(cmat[i])
+	Get the eigenvalue (eval) & eigenvector (evec) of Cov_mat
+	Eval[i] = eval
+	Evec[i] = evec
+	Zeval = eval[0]
+	Zevec = evec[0]
+
+	## Extracting relationship matrix
+
+	Set flag = FALSE
+	IF sum of eval is 0 :
+		Set flag = TRUE
+	END IF
+
+	IF flag = FALSE :
+		Seval = sum of all eval
+	ELSE 
+		Seval = 1
+	END IF
+
+	t = no. of eval for Cov_mat
+	sum = 0
+	FOR j=0 to t :
+		Sum = Sum + eval[j]
+		r = Sum/Seval
+		
+		IF r <= th :
+			APPEND evec[:,j] to Vec_M 
+			APPEND eval[j] to Val_M
+		ELSE: 
+			break
+		END IF
+	END FOR
+
+	
+	IF legnth of Val_M[i] == 0 :
+		abc = abc + 1
+		Vec_M[i] = evec[:,0]
+		Val_M[i] = eval[:,0]
+	END IF
+	V_M = diagonal matrix with elements Val_M[i]
+END FOR
